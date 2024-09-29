@@ -7,7 +7,8 @@ from rest_framework import status
 
 from .serializers import CandidateSerializer
 from .models import Candidate
-from django.db.models import Q
+from django.db.models import Q, IntegerField
+from django.db.models.functions import Cast
 
 class CandidateList(APIView):
     """
@@ -23,9 +24,17 @@ class CandidateList(APIView):
         query = Q()
 
         if "name" in query_params:
+            queryset = Candidate.objects.all()
             words = query_params["name"].split()
             for word in words:
                 query |= Q(name__icontains=word)
+
+            queryset = queryset.annotate(
+                relevancy_score=sum([
+                    Cast(Q(name__icontains=word), IntegerField()) for word in words
+                ])
+            )
+            return Response(CandidateSerializer(queryset.filter(query).order_by('-relevancy_score'), many=True).data, status=status.HTTP_200_OK)
         
         candidates = Candidate.objects.filter(query)
         
